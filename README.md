@@ -1,59 +1,254 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Holocron Sentinel
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+API backend para monitoramento de entidades estratégicas e seus eventos, com foco em **concorrência**, **idempotência** e **performance em alto volume de dados**.
 
-## About Laravel
+Este projeto foca exclusivamente no backend, não possuindo interface de frontend.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+<br>
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+<br>
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Contexto
 
-## Laravel Sponsors
+O Holocron Sentinel é um sistema fictício utilizado para monitorar entidades relevantes da Aliança Rebelde, como planetas, bases ou naves estratégicas.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Cada entidade pode receber eventos que representam atividades rotineiras ou ameaças críticas. Eventos críticos impactam diretamente o estado da entidade e podem levá-la à suspensão automática.
 
-### Premium Partners
+O sistema foi projetado considerando:
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+- alto volume de dados
+- múltiplas requisições simultâneas
+- consistência sob concorrência
 
-## Contributing
+<br>
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+<br>
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Modelo de Domínio
 
-## Security Vulnerabilities
+### Entidade Monitorada (`entities`)
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- representa algo que deve ser continuamente observado
+- inicia sempre com status `active`
+- pode ser suspensa automaticamente ao atingir um limite de eventos críticos
+- não aceita novos eventos quando suspensa
 
-## License
+Campos principais:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- `id`
+- `name`
+- `status` (`active`, `suspended`)
+- `critical_events_count`
+- `created_at`
+- `updated_at`
+
+<br>
+
+---
+
+<br>
+
+### Evento (`events`)
+
+- representa uma ocorrência associada a uma entidade
+- pertence obrigatoriamente a uma entidade monitorada
+- é identificado externamente por um `external_id` (idempotência)
+- eventos do tipo `critical` impactam o estado da entidade
+
+Campos principais:
+
+- `id`
+- `entity_id`
+- `external_id` (único)
+- `type` (`info`, `warning`, `critical`)
+- `payload` (JSON)
+- `created_at`
+
+Relacionamento:
+
+```
+entities (1) ──────────────── (N) events
+```
+
+<br>
+
+---
+
+<br>
+
+## Modelo de Dados (ERD)
+
+```mermaid
+erDiagram
+    ENTITIES ||--o{ EVENTS : has
+    ENTITIES {
+        bigint id PK
+        varchar name
+        varchar status
+        bigint critical_events_count
+        timestamp created_at
+        timestamp updated_at
+    }
+    EVENTS {
+        bigint id PK
+        bigint entity_id FK
+        varchar external_id "UNIQUE"
+        varchar type
+        json payload
+        timestamp created_at
+    }
+```
+
+<br>
+
+---
+
+<br>
+
+## Decisões Técnicas
+
+### Idempotência
+
+- Garantida no **nível do banco de dados** através de índice único em `events.external_id`
+- Evita processamento duplicado mesmo sob múltiplas requisições simultâneas
+
+### Concorrência e Consistência
+
+- Operações críticas são executadas dentro de **transações**
+- A entidade monitorada é bloqueada (`SELECT … FOR UPDATE`) durante o registro de eventos
+- Garante consistência entre:
+  - criação do evento
+  - incremento do contador de eventos críticos
+  - possível suspensão automática da entidade
+
+### Performance
+
+- Uso de índices direcionados para:
+  - agregações
+  - filtros temporais
+  - ranking de eventos críticos
+- Queries agregadas para evitar problemas de **N+1**
+- Contador de eventos críticos mantido de forma denormalizada para otimizar leituras
+
+<br>
+
+---
+
+<br>
+
+## Endpoints da API
+
+### Criar entidade monitorada
+
+**POST** `/api/entities`
+
+```json
+{
+  "name": "Hoth Base"
+}
+```
+
+### Listar entidades monitoradas
+
+**GET** `/api/entities`
+
+Retorna, para cada entidade:
+
+- dados básicos
+- total de eventos associados
+- total de eventos críticos
+- data do último evento registrado
+
+### Registrar evento para uma entidade
+
+**POST** `/api/entities/{entityId}/events`
+
+```json
+{
+  "external_id": "abc-123",
+  "type": "critical",
+  "payload": {
+    "source": "probe"
+  }
+}
+```
+
+Comportamento:
+
+- idempotente via `external_id`
+- rejeita eventos para entidades suspensas, retornando erro de negócio (ex.: **409 Conflict**)
+- suspende automaticamente a entidade ao atingir o limite configurado de eventos críticos
+
+### Ranking de entidades críticas
+
+**GET** `/api/entities/ranking/critical?days=7&limit=10`
+
+Retorna as entidades com mais eventos críticos no período informado, ordenadas do mais crítico para o menos crítico.
+
+<br>
+
+---
+
+<br>
+
+## Testes
+
+- Testes de integração localizados em `tests/Feature`
+- Validação das regras de negócio, não apenas de status HTTP
+- Cobertura de cenários como:
+  - idempotência de eventos
+  - suspensão automática de entidades
+  - consistência sob concorrência
+
+<br>
+
+---
+
+<br>
+
+## Executando o projeto
+
+O projeto pode ser executado via Docker Compose.
+
+Passos gerais:
+
+```bash
+docker compose up -d
+docker compose exec app php artisan migrate
+docker compose exec app php artisan test
+```
+
+As configurações de banco e containers estão descritas no `docker-compose.yml`.
+
+<br>
+
+---
+
+<br>
+
+## Possíveis Evoluções em Produção
+
+- Cache de agregações e rankings
+- Views materializadas ou tabelas de consolidação
+- Particionamento da tabela de eventos
+- Observabilidade (logs estruturados, métricas, tracing)
+- Estratégias de retry e circuit breaker
+
+<br>
+
+---
+
+<br>
+
+## Stack
+
+- PHP 8+
+- Laravel
+- Banco relacional (PostgreSQL)
+- Docker / Docker Compose
