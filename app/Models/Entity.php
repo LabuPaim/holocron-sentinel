@@ -11,7 +11,6 @@ class Entity extends Model
     protected $fillable = [
         'name',
         'status',
-        'critical_events_count',
     ];
 
     protected $casts = [
@@ -28,8 +27,22 @@ class Entity extends Model
         return $this->status === 'active';
     }
 
+    public function isSuspended(): bool
+    {
+        return $this->status === 'suspended';
+    }
+
     public function suspend(): void
     {
         $this->status = 'suspended';
+    }
+
+    public function addCriticalEvent(): void
+    {
+        $this->critical_events_count++;
+        
+        if ($this->critical_events_count >= config('holocron.critical_events_limit')) {
+            $this->suspend();
+        }
     }
 }
