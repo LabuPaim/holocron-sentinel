@@ -27,10 +27,6 @@ class Entity extends Model
         return $this->status === 'active';
     }
 
-    public function isSuspended(): bool
-    {
-        return $this->status === 'suspended';
-    }
 
     public function suspend(): void
     {
@@ -40,7 +36,7 @@ class Entity extends Model
     public function addCriticalEvent(): void
     {
         $this->critical_events_count++;
-        
+
         if ($this->critical_events_count >= config('holocron.critical_events_limit')) {
             $this->suspend();
         }
