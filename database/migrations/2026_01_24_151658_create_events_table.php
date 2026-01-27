@@ -19,9 +19,9 @@ return new class extends Migration
             $table->json('payload')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
-            $table->index('external_id');
-            $table->index('type');
-            $table->index('created_at');
+            $table->index(['entity_id', 'created_at']);
+            $table->index(['type', 'created_at']);
+
         });
     }
 
