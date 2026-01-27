@@ -49,7 +49,7 @@ class RegisterEventService
                 throw $e;
             }
 
-            if ($entity->isCritical()) {
+            if ($type === 'critical') {
                 $entity->addCriticalEvent();
                 $entity->save();
             }
