@@ -25,16 +25,28 @@ services:
       POSTGRES_DB: ${DB_DATABASE}
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+      # Otimizações de performance do PostgreSQL
+      POSTGRES_INITDB_ARGS: "-E UTF8"
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
+    command: >
+      postgres
+      -c max_wal_size=4GB
+      -c checkpoint_timeout=15min
+      -c checkpoint_completion_target=0.9
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c wal_buffers=16MB
+      -c log_min_messages=warning
     networks:
       - holocron_network
 
 volumes:
   pgdata:
-  
+
 networks:
   holocron_network:
     driver: bridge
