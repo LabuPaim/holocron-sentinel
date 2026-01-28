@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\PostgresSqlState;
 use App\Models\Entity;
 use App\Models\Event;
 use Illuminate\Support\Facades\DB;
@@ -41,7 +42,18 @@ class RegisterEventService
                     'payload'     => $payload,
                 ]);
             } catch (QueryException $e) {
-                if (($e->getCode() ?? null) !== '23505') {
+                // errorInfo()[0] retorna o código SQLSTATE do PostgreSQL
+                $errorInfo = $e->errorInfo ?? [];
+                $sqlState = $errorInfo[0] ?? null;
+
+                try {
+                    $postgresError = PostgresSqlState::from($sqlState);
+                } catch (\ValueError) {
+                    // Código SQLSTATE não reconhecido, re-lança a exceção
+                    throw $e;
+                }
+
+                if (! $postgresError->isUniqueViolation()) {
                     throw $e;
                 }
 
