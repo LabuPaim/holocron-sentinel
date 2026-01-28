@@ -17,8 +17,6 @@ return new class extends Migration
             $table->string('status')->default('active');
             $table->unsignedBigInteger('critical_events_count')->default(0);
             $table->timestamps();
-            
-            $table->index('critical_events_count');
         });
     }
 
