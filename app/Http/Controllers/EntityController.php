@@ -16,15 +16,19 @@ class EntityController extends Controller
     ): JsonResponse {
         $entity = $service->execute($request->input('name'));
 
-        // Retorna apenas os campos necessários para reduzir overhead de serialização
-        return response()->json([
+        $payload = [
             'id' => $entity->id,
             'name' => $entity->name,
-            'status' => $entity->status,
+            'status' => $entity->status->value,
             'critical_events_count' => $entity->critical_events_count,
             'created_at' => $entity->created_at,
             'updated_at' => $entity->updated_at,
-        ], 201);
+        ];
+
+        // Idempotência: 201 Created se novo, 200 OK se já existia
+        $status = $entity->wasRecentlyCreated ? 201 : 200;
+
+        return response()->json($payload, $status);
     }
 
     public function index(
