@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Entity;
+use App\Services\CreateEntityService;
 use Illuminate\Http\Request;
 use App\Http\Requests\StoreEntityRequest;
 use Illuminate\Http\JsonResponse;
@@ -10,13 +11,11 @@ use Illuminate\Support\Facades\DB;
 
 class EntityController extends Controller
 {
-    public function store(StoreEntityRequest $request): JsonResponse
-    {
-        // Otimização: Usa create() diretamente sem query() para reduzir overhead
-        $entity = Entity::create([
-            'name' => $request->input('name'),
-            'status' => 'active',
-        ]);
+    public function store(
+        StoreEntityRequest $request,
+        CreateEntityService $service
+    ): JsonResponse {
+        $entity = $service->execute($request->input('name'));
 
         // Retorna apenas os campos necessários para reduzir overhead de serialização
         return response()->json([
