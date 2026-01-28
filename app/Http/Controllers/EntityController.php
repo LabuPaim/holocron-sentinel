@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Entity;
 use App\Services\CreateEntityService;
 use App\Services\ListEntitiesService;
 use Illuminate\Http\Request;

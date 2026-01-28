@@ -11,6 +11,7 @@ class Entity extends Model
     protected $fillable = [
         'name',
         'status',
+        'critical_events_count',
     ];
 
     protected $casts = [

@@ -18,6 +18,7 @@ class CreateEntityService
         return Entity::create([
             'name' => $name,
             'status' => 'active',
+            'critical_events_count' => 0,
         ]);
     }
 }
