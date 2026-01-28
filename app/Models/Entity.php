@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\EntityStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Entity extends Model
 {
-    //
     protected $fillable = [
         'name',
         'status',
@@ -15,6 +15,7 @@ class Entity extends Model
     ];
 
     protected $casts = [
+        'status' => EntityStatus::class,
         'critical_events_count' => 'integer',
     ];
 
@@ -25,13 +26,12 @@ class Entity extends Model
 
     public function isActive(): bool
     {
-        return $this->status === 'active';
+        return $this->status->isActive();
     }
-
 
     public function suspend(): void
     {
-        $this->status = 'suspended';
+        $this->status = EntityStatus::Suspended;
     }
 
     public function addCriticalEvent(): void
