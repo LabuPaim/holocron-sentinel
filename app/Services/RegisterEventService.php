@@ -5,48 +5,61 @@ namespace App\Services;
 use App\Models\Entity;
 use App\Models\Event;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Database\QueryException;
 use DomainException;
-
 
 class RegisterEventService
 {
     public function execute(
-        int $entityId, 
-        string $externalId, 
-        string $type, 
+        int $entityId,
+        string $externalId,
+        string $type,
         array $payload
     ): Event {
-
         $externalId = trim($externalId);
         $type = strtolower(trim($type));
 
-        if (empty($externalId)) {
+        if ($externalId === '') {
             throw new DomainException('external_id is required');
         }
 
         return DB::transaction(function () use ($entityId, $externalId, $type, $payload) {
-            $entity = Entity::query()->whereKey($entityId)->lockForUpdate()->firstOrFail();
-            
-            if (!$entity->isActive()) {
+            $entity = Entity::query()
+                ->whereKey($entityId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $entity->isActive()) {
                 throw new DomainException('Entity is suspended');
             }
 
             try {
                 $event = Event::query()->create([
-                    'entity_id' => $entity->id,
+                    'entity_id'   => $entity->id,
                     'external_id' => $externalId,
-                    'type' => $type,
-                    'payload' => $payload,
+                    'type'        => $type,
+                    'payload'     => $payload,
                 ]);
             } catch (QueryException $e) {
-                
-                $existing = Event::query()->where('external_id', $externalId)->first();
-                if ($existing) {
-                    return $existing;
+                if (($e->getCode() ?? null) !== '23505') {
+                    throw $e;
                 }
-                throw $e;
+
+                $existing = Event::query()
+                    ->where('external_id', $externalId)
+                    ->first();
+
+                // Se caiu aqui, era pra existir. Se não existir, algo muito estranho rolou.
+                if (! $existing) {
+                    throw $e;
+                }
+
+                // Protege contra external_id "global" sendo reaproveitado por outra entidade
+                if ((int) $existing->entity_id !== (int) $entityId) {
+                    throw new DomainException('external_id already used by another entity');
+                }
+
+                return $existing;
             }
 
             if ($type === 'critical') {
