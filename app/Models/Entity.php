@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EntityStatus;
+use App\Models\Setting;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -46,7 +47,8 @@ class Entity extends Model
 
         $this->refresh();
 
-        if ($this->critical_events_count >= config('holocron.critical_events_limit')) {
+        $limit = Setting::getValue('critical_events_limit', 3);
+        if ($this->critical_events_count >= $limit) {
             $this->suspend();
             $this->save();
         }
