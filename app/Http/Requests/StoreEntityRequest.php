@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreEntityRequest extends FormRequest
 {
@@ -15,6 +16,18 @@ class StoreEntityRequest extends FormRequest
     }
 
     /**
+     * Normaliza os dados antes da validação.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('name')) {
+            $this->merge([
+                'name' => trim($this->input('name')),
+            ]);
+        }
+    }
+
+    /**
      * Obtém as regras de validação que se aplicam à solicitação.
      *
      * @return array<string, string|array>
@@ -22,7 +35,28 @@ class StoreEntityRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'min:2', 'max:255'],
+            'name' => [
+                'required',
+                'string',
+                'min:2',
+                'max:255',
+                Rule::unique('entities', 'name'),
+            ],
+        ];
+    }
+
+    /**
+     * Mensagens de erro customizadas.
+     *
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'name.required' => 'O nome da entidade é obrigatório.',
+            'name.min' => 'O nome deve ter no mínimo :min caracteres.',
+            'name.max' => 'O nome deve ter no máximo :max caracteres.',
+            'name.unique' => 'Já existe uma entidade com este nome.',
         ];
     }
 }
