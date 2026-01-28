@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Entity;
 use App\Services\CreateEntityService;
+use App\Services\ListEntitiesService;
 use Illuminate\Http\Request;
 use App\Http\Requests\StoreEntityRequest;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 
 class EntityController extends Controller
 {
@@ -28,35 +28,12 @@ class EntityController extends Controller
         ], 201);
     }
 
-    public function index(Request $request): JsonResponse
-    {
+    public function index(
+        Request $request,
+        ListEntitiesService $service
+    ): JsonResponse {
         $perPage = (int) $request->query('per_page', 10);
-        $perPage = max(1, min($perPage, 100));
-
-        // Otimização: Usa uma única query com LEFT JOIN e agregações
-        // Os índices [entity_id, created_at] e [type, created_at] são usados automaticamente
-        // Esta abordagem é mais eficiente que subqueries correlacionadas
-        $entities = Entity::query()
-            ->select(
-                'entities.id',
-                'entities.name',
-                'entities.status',
-                'entities.critical_events_count',
-                'entities.created_at',
-                DB::raw('COALESCE(COUNT(events.id), 0) as events_count'),
-                DB::raw('COALESCE(SUM(CASE WHEN events.type = \'critical\' THEN 1 ELSE 0 END), 0) as critical_events_total'),
-                DB::raw('MAX(events.created_at) as last_event_at')
-            )
-            ->leftJoin('events', 'events.entity_id', '=', 'entities.id')
-            ->groupBy(
-                'entities.id',
-                'entities.name',
-                'entities.status',
-                'entities.critical_events_count',
-                'entities.created_at'
-            )
-            ->orderByDesc('entities.created_at')
-            ->paginate($perPage);
+        $entities = $service->execute($perPage);
 
         return response()->json($entities);
     }
