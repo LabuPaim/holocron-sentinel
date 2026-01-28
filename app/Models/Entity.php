@@ -34,12 +34,21 @@ class Entity extends Model
         $this->status = EntityStatus::Suspended;
     }
 
+    /**
+     * Incrementa o contador de eventos críticos de forma atômica no banco
+     * e aplica suspensão se atingir o limite. Deve ser chamado dentro de transação
+     */
     public function addCriticalEvent(): void
     {
-        $this->critical_events_count++;
+        $this->newQuery()
+            ->whereKey($this->getKey())
+            ->increment('critical_events_count');
+
+        $this->refresh();
 
         if ($this->critical_events_count >= config('holocron.critical_events_limit')) {
             $this->suspend();
+            $this->save();
         }
     }
 }
