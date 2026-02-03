@@ -2,21 +2,30 @@
 
 namespace App\Services;
 
-use App\Enums\PostgresSqlState;
+use App\Exceptions\ExternalIdConflictException;
+use App\Jobs\InvalidateEventCachesJob;
 use App\Models\Entity;
 use App\Models\Event;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use DomainException;
 
 class RegisterEventService
 {
+    /**
+     * Registra um evento dentro de uma única transação.
+     * Idempotência por external_id: mesmo entity + external_id → 200 + evento existente;
+     * external_id em outra entidade → 409.
+     * Job de cache só é disparado após commit (afterCommit).
+     *
+     * @return array{event: Event, created: bool}
+     */
     public function execute(
         int $entityId,
         string $externalId,
         string $type,
         array $payload
-    ): Event {
+    ): array {
         $externalId = trim($externalId);
         $type = strtolower(trim($type));
 
@@ -24,7 +33,7 @@ class RegisterEventService
             throw new DomainException('external_id is required');
         }
 
-        return DB::transaction(function () use ($entityId, $externalId, $type, $payload) {
+        return DB::transaction(function () use ($entityId, $externalId, $type, $payload): array {
             $entity = Entity::query()
                 ->whereKey($entityId)
                 ->lockForUpdate()
@@ -42,18 +51,8 @@ class RegisterEventService
                     'payload'     => $payload,
                 ]);
             } catch (QueryException $e) {
-                // errorInfo()[0] retorna o código SQLSTATE do PostgreSQL
-                $errorInfo = $e->errorInfo ?? [];
-                $sqlState = $errorInfo[0] ?? null;
-
-                try {
-                    $postgresError = PostgresSqlState::from($sqlState);
-                } catch (\ValueError) {
-                    // Código SQLSTATE não reconhecido, re-lança a exceção
-                    throw $e;
-                }
-
-                if (! $postgresError->isUniqueViolation()) {
+                $sqlState = $e->errorInfo[0] ?? '';
+                if ($sqlState !== '23505') {
                     throw $e;
                 }
 
@@ -61,17 +60,15 @@ class RegisterEventService
                     ->where('external_id', $externalId)
                     ->first();
 
-                // Se caiu aqui, era pra existir. Se não existir, algo muito estranho rolou.
                 if (! $existing) {
                     throw $e;
                 }
 
-                // Protege contra external_id "global" sendo reaproveitado por outra entidade
                 if ((int) $existing->entity_id !== (int) $entityId) {
-                    throw new DomainException('external_id already used by another entity');
+                    throw new ExternalIdConflictException('external_id already used by another entity');
                 }
 
-                return $existing;
+                return ['event' => $existing, 'created' => false];
             }
 
             if ($type === 'critical') {
@@ -79,7 +76,10 @@ class RegisterEventService
                 $entity->save();
             }
 
-            return $event;
+            InvalidateEventCachesJob::dispatch($entityId, $type === 'critical')
+                ->afterCommit();
+
+            return ['event' => $event, 'created' => true];
         });
     }
 }

@@ -16,5 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->renderable(function (\App\Exceptions\ExternalIdConflictException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        });
     })->create();

@@ -20,6 +20,10 @@ class Event extends Model
         'payload' => 'array',
     ];
 
+    /**
+     * Cache de listagem e ranking é invalidado de forma assíncrona por InvalidateEventCachesJob.
+     */
+
     public function entity(): BelongsTo
     {
         return $this->belongsTo(Entity::class);

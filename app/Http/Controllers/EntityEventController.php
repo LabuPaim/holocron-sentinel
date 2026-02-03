@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ExternalIdConflictException;
 use App\Http\Requests\StoreEventRequest;
 use App\Services\RegisterEventService;
 use DomainException;
@@ -16,18 +17,21 @@ class EntityEventController extends Controller
         RegisterEventService $service
     ): JsonResponse {
         try {
-            $event = $service->execute(
+            $result = $service->execute(
                 entityId: $entityId,
                 externalId: $request->string('external_id'),
                 type: $request->string('type'),
                 payload: $request->input('payload', [])
             );
 
-            return response()->json($event, 201);
+            $status = $result['created'] ? 201 : 200;
+
+            return response()->json($result['event'], $status);
         } catch (ModelNotFoundException) {
             return response()->json(['message' => 'Entity not found'], 404);
+        } catch (ExternalIdConflictException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
         } catch (DomainException $e) {
-            // regra de domínio (ex: suspensa)
             return response()->json(['message' => $e->getMessage()], 422);
         }
     }

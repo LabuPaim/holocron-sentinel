@@ -19,6 +19,12 @@ class Entity extends Model
         'critical_events_count' => 'integer',
     ];
 
+    /**
+     * Cache de listagem é invalidado de forma assíncrona por InvalidateEventCachesJob
+     * (disparado após criação de evento). Outras atualizações de entidade podem
+     * disparar o mesmo job onde fizer sentido.
+     */
+
     public function events(): HasMany
     {
         return $this->hasMany(Event::class);

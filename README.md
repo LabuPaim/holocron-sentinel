@@ -121,18 +121,23 @@ erDiagram
 ### Concorrência e Consistência
 
 - Operações críticas são executadas dentro de **transações**
-- A entidade monitorada é bloqueada (`SELECT … FOR UPDATE`) durante o registro de eventos
+- Processamento assíncrono de eventos críticos via **Jobs/Queues** para reduzir locks no banco
+- A entidade monitorada é bloqueada apenas quando necessário (`SELECT … FOR UPDATE`)
 - Garante consistência entre:
-  - criação do evento
-  - incremento do contador de eventos críticos
-  - possível suspensão automática da entidade
+  - criação do evento (síncrono para idempotência)
+  - incremento do contador de eventos críticos (assíncrono via Job)
+  - possível suspensão automática da entidade (assíncrono)
 
 ### Performance
 
+- **Processamento assíncrono**: Eventos críticos são processados em background via Jobs, reduzindo drasticamente o tempo de lock na requisição HTTP
+- **Cache**: Listagens e rankings são cacheados para reduzir consultas ao banco
+  - Cache de listagem: 5 minutos
+  - Cache de ranking: 2 minutos
 - Uso de índices direcionados para:
   - agregações
   - filtros temporais
-  - ranking de eventos críticos
+  - ranking de eventos críticos (índice composto `[entity_id, type, created_at]`)
 - Queries agregadas para evitar problemas de **N+1**
 - Contador de eventos críticos mantido de forma denormalizada para otimizar leituras
 
@@ -224,6 +229,14 @@ docker compose exec app php artisan migrate
 docker compose exec app php artisan test
 ```
 
+**Importante**: Para processar eventos críticos de forma assíncrona, é necessário executar o worker de filas:
+
+```bash
+docker compose exec app php artisan queue:work --queue=critical-events,default
+```
+
+Ou em produção, configure um supervisor/systemd para manter o worker rodando continuamente.
+
 As configurações de banco e containers estão descritas no `docker-compose.yml`.
 
 <br>
@@ -232,13 +245,38 @@ As configurações de banco e containers estão descritas no `docker-compose.yml
 
 <br>
 
+## Arquitetura Assíncrona
+
+Regras de negócio permanecem **síncronas** (consistência forte); apenas invalidação de cache/agregados é **assíncrona**. Ver `ASYNC_ARCHITECTURE.md`.
+
+### Fluxo de Criação de Eventos
+
+1. **Requisição HTTP**: Cria o evento de forma síncrona (idempotência por `external_id`)
+2. **Eventos críticos**: Contador e suspensão são atualizados **na mesma requisição** (transação com `lockForUpdate()`)
+3. **Job assíncrono**: `InvalidateEventCachesJob` é enfileirado para invalidar caches de listagem e ranking
+4. **Worker**: Processa o job em background (sem regras de negócio)
+
+### Cache
+
+- **Listagem de entidades**: Cache de 5 minutos; invalidado pelo job após criação de evento
+- **Ranking crítico**: Cache de 2 minutos; invalidado pelo job quando o evento é crítico
+
+### Configuração de Filas
+
+Por padrão, o sistema usa filas do banco de dados (`QUEUE_CONNECTION=database`). Para produção, considere:
+
+- **Redis**: Melhor performance para filas
+- **RabbitMQ/SQS**: Para ambientes distribuídos
+- **Supervisor**: Para manter workers rodando continuamente
+
 ## Possíveis Evoluções em Produção
 
-- Cache de agregações e rankings
+- ~~Cache de agregações e rankings~~ ✅ Implementado
 - Views materializadas ou tabelas de consolidação
 - Particionamento da tabela de eventos
 - Observabilidade (logs estruturados, métricas, tracing)
 - Estratégias de retry e circuit breaker
+- Monitoramento de filas e jobs
 
 <br>
 

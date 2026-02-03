@@ -16,6 +16,21 @@ services:
       - holocron_network
     command: php artisan serve --host=0.0.0.0 --port=8000
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: holocron_worker
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - db
+    env_file:
+      - .env
+    networks:
+      - holocron_network
+    command: php artisan queue:work database --sleep=1 --tries=3 --max-time=3600
+
   db:
     image: postgres:15
     container_name: holocron_db
